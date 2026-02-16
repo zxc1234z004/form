@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>點名系統 - 請假功能版</title>
+  <title>點名系統 - 請假下拉版</title>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 20px; background-color: #f5f5f5; color: #333; }
     .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -23,6 +23,22 @@
     .hidden { display: none; }
     #loader { text-align: center; color: #666; padding: 20px; }
     .error-box { color: #d32f2f; background-color: #ffebee; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9em; display: none; word-break: break-all; }
+
+    /* Modal 樣式 */
+    #leave-modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-content {
+      background: white; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; text-align: center;
+    }
+    .modal-content select {
+      width: 100%; padding: 12px; margin: 15px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 1em;
+    }
+    .modal-btns { display: flex; justify-content: space-between; gap: 10px; }
+    .modal-btns button { flex: 1; padding: 12px; }
+    .btn-cancel { background: #eee; color: #333; }
+    .btn-confirm { background: #ff9800; color: white; }
   </style>
 </head>
 <body>
@@ -35,10 +51,31 @@
     <div id="name-list" class="hidden"></div>
   </div>
 
+  <!-- 請假原因彈窗 -->
+  <div id="leave-modal" class="hidden">
+    <div class="modal-content">
+      <h4 id="modal-name">成員請假</h4>
+      <p>請選擇原因：</p>
+      <select id="leave-reason-select">
+        <option value="病假">病假</option>
+        <option value="事假">事假</option>
+        <option value="公假">公假</option>
+        <option value="晚到">晚到</option>
+        <option value="其他">其他</option>
+      </select>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeLeaveModal()">取消</button>
+        <button class="btn-confirm" id="modal-submit-btn">確定</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxNFakNmcRc37HVkTyl3qmX4ovQ4REekrYTnHI7jbxW6LWO2uEoPaqP8Ok57lLtPT6J/exec";
     
     let allData = []; 
+    let currentItem = null;
+    let currentBtn = null;
 
     window.onload = () => {
       loadData();
@@ -59,7 +96,6 @@
         loader.style.display = 'none';
         errorDisplay.style.display = 'block';
         errorDisplay.innerHTML = `<strong>❌ 連線失敗</strong><br>請確認 GAS 部署權限設為「所有人」。`;
-        console.error(err);
       }
     }
 
@@ -106,7 +142,7 @@
           </div>
           <div class="btn-group">
             <button class="btn-present" onclick="submit(this, ${JSON.stringify(item).replace(/"/g, '&quot;')}, '出席')">出席</button>
-            <button class="btn-leave" onclick="handleLeave(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">請假</button>
+            <button class="btn-leave" onclick="openLeaveModal(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">請假</button>
           </div>
         `;
         nameList.appendChild(div);
@@ -116,14 +152,22 @@
       backBtn.classList.remove('hidden');
     }
 
-    function handleLeave(btn, item) {
-      const reason = prompt(`請輸入 ${item.name} 的請假原因：`);
-      if (reason === null) return; // 使用者按取消
-      if (reason.trim() === "") {
-        alert("請輸入請假原因！");
-        return;
-      }
-      submit(btn, item, '請假', reason);
+    function openLeaveModal(btn, item) {
+      currentItem = item;
+      currentBtn = btn;
+      document.getElementById('modal-name').innerText = `成員：${item.name}`;
+      document.getElementById('leave-modal').classList.remove('hidden');
+      document.getElementById('modal-submit-btn').onclick = () => {
+        const reason = document.getElementById('leave-reason-select').value;
+        submit(currentBtn, currentItem, '請假', reason);
+        closeLeaveModal();
+      };
+    }
+
+    function closeLeaveModal() {
+      document.getElementById('leave-modal').classList.add('hidden');
+      currentItem = null;
+      currentBtn = null;
     }
 
     async function submit(btn, item, status, reason = "") {
@@ -145,7 +189,7 @@
         const data = await response.json();
         alert(data.message);
       } catch (err) {
-        alert("簽到失敗，請檢查網路或 GAS 設定。");
+        alert("傳送失敗，請確認 GAS 部署權存。");
       } finally {
         btn.disabled = false;
         btn.innerText = originalText;
