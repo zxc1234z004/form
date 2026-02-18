@@ -3,69 +3,89 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>點名系統 - 請假下拉版</title>
+  <title>崇正班期點名系統</title>
   <style>
     body { font-family: -apple-system, sans-serif; padding: 20px; background-color: #f5f5f5; color: #333; }
     .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h3 { text-align: center; color: #444; margin-bottom: 20px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    .area-btn { background-color: #2196F3; color: white; border: none; padding: 20px; border-radius: 8px; font-size: 1.1em; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-    .area-btn:hover { background-color: #1976D2; }
+    
+    /* 區域按鈕樣式 */
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .area-btn { 
+      background-color: #2196F3; color: white; border: none; padding: 18px; 
+      border-radius: 10px; font-size: 1.05em; cursor: pointer; font-weight: bold; 
+      transition: all 0.2s; text-align: left; display: flex; justify-content: space-between; align-items: center;
+    }
+    .area-btn:hover { background-color: #1976D2; transform: translateY(-2px); }
+    .area-btn::after { content: '→'; opacity: 0.7; }
+    
+    /* 小區域按鈕樣式 (顏色稍淡) */
+    .sub-area-btn { background-color: #607D8B; }
+    .sub-area-btn:hover { background-color: #455A64; }
+
+    /* 名單顯示 */
     .row { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding: 15px 0; }
     .info { display: flex; flex-direction: column; }
     .name-text { font-size: 1.1em; font-weight: bold; }
     .sub-text { font-size: 0.85em; color: #666; }
+    
     .btn-group { display: flex; gap: 8px; }
     button { border: none; padding: 10px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em; }
     .btn-present { background-color: #4caf50; color: white; }
     .btn-leave { background-color: #ff9800; color: white; }
+    
     .back-btn { background-color: #757575; color: white; margin-bottom: 15px; width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
+    
     #loader { text-align: center; color: #666; padding: 20px; }
     .error-box { color: #d32f2f; background-color: #ffebee; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9em; display: none; word-break: break-all; }
 
     /* Modal 樣式 */
-    #leave-modal {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; 
+      z-index: 9999; backdrop-filter: blur(2px);
     }
-    .modal-content {
-      background: white; padding: 25px; border-radius: 12px; width: 85%; max-width: 350px; text-align: center;
+    .modal-card {
+      background: white; padding: 24px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
     }
-    .modal-content select {
-      width: 100%; padding: 12px; margin: 15px 0; border-radius: 6px; border: 1px solid #ccc; font-size: 1em;
+    .modal-card h4 { margin: 0 0 8px 0; color: #333; }
+    .modal-card select {
+      width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ddd; font-size: 1.1em;
     }
-    .modal-btns { display: flex; justify-content: space-between; gap: 10px; }
-    .modal-btns button { flex: 1; padding: 12px; }
-    .btn-cancel { background: #eee; color: #333; }
+    .modal-actions { display: flex; gap: 12px; }
+    .modal-actions button { flex: 1; padding: 12px; }
+    .btn-cancel { background: #f0f0f0; color: #444; }
     .btn-confirm { background: #ff9800; color: white; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h3 id="title">📋 點名系統 - 請選擇區域</h3>
+    <h3 id="title">📋 點名系統</h3>
     <div id="error-display" class="error-box"></div>
-    <button id="back-btn" class="back-btn hidden" onclick="showAreas()">← 返回區域選擇</button>
-    <div id="loader">讀取名冊中...</div>
+    <button id="back-btn" class="back-btn hidden">← 返回</button>
+    <div id="loader">正在讀取雲端名冊...</div>
     <div id="area-grid" class="grid hidden"></div>
+    <div id="sub-area-grid" class="grid hidden"></div>
     <div id="name-list" class="hidden"></div>
   </div>
 
-  <!-- 請假原因彈窗 -->
-  <div id="leave-modal" class="hidden">
-    <div class="modal-content">
-      <h4 id="modal-name">成員請假</h4>
+  <!-- 請假彈窗 -->
+  <div id="leave-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h4 id="modal-title-name">請假登記</h4>
       <p>請選擇原因：</p>
-      <select id="leave-reason-select">
+      <select id="leave-reason">
         <option value="病假">病假</option>
         <option value="事假">事假</option>
         <option value="公假">公假</option>
         <option value="晚到">晚到</option>
         <option value="其他">其他</option>
       </select>
-      <div class="modal-btns">
+      <div class="modal-actions">
         <button class="btn-cancel" onclick="closeLeaveModal()">取消</button>
-        <button class="btn-confirm" id="modal-submit-btn">確定</button>
+        <button class="btn-confirm" id="confirm-leave-btn">確認提交</button>
       </div>
     </div>
   </div>
@@ -74,106 +94,187 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxNFakNmcRc37HVkTyl3qmX4ovQ4REekrYTnHI7jbxW6LWO2uEoPaqP8Ok57lLtPT6J/exec";
     
     let allData = []; 
-    let currentItem = null;
-    let currentBtn = null;
+    let currentTargetItem = null; 
+    let currentTargetBtn = null;
+    let currentView = 'main'; // main, sub, list
 
-    window.onload = () => {
-      loadData();
-    };
+    // 定義區域分類規則
+    const AREA_GROUPS = [
+      { name: "中和區~中和060區", keywords: ["中和", "中和00", "中和01", "中和02", "中 scavenger 03", "中和04", "中和05", "中和060"] },
+      { name: "中和061區~中和開荒區", keywords: ["中和06", "中和07", "中和08", "中和09", "中和1", "開荒"] },
+      { name: "精明", keywords: ["精明"] },
+      { name: "馬來西亞", keywords: ["馬來西亞", "Malaysia"] },
+      { name: "印尼", keywords: ["印尼", "Indonesia"] },
+      { name: "越南 澳洲 孟加拉 加拿大", keywords: ["越南", "澳洲", "孟加拉", "加拿大"] }
+    ];
+
+    window.onload = loadData;
 
     async function loadData() {
-      const loader = document.getElementById('loader');
-      const errorDisplay = document.getElementById('error-display');
       try {
         const response = await fetch(`${GAS_URL}?action=getList`);
-        if (!response.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}`);
-        const data = await response.json();
-        allData = data;
-        loader.classList.add('hidden');
-        errorDisplay.style.display = 'none';
-        showAreas();
+        allData = await response.json();
+        document.getElementById('loader').classList.add('hidden');
+        showMainAreas();
       } catch (err) {
-        loader.style.display = 'none';
+        document.getElementById('loader').classList.add('hidden');
+        const errorDisplay = document.getElementById('error-display');
         errorDisplay.style.display = 'block';
-        errorDisplay.innerHTML = `<strong>❌ 連線失敗</strong><br>請確認 GAS 部署權限設為「所有人」。`;
+        errorDisplay.innerHTML = "無法連接到資料庫，請檢查網路或 GAS 部署權限。";
       }
     }
 
-    function showAreas() {
+    // 將具體區域分配到自定義大分類
+    function getParentGroupName(rawArea) {
+      if (!rawArea) return "其他";
+      if (rawArea.includes("中和")) {
+        const numMatch = rawArea.match(/\d+/);
+        if (numMatch) {
+          const num = parseInt(numMatch[0]);
+          if (num >= 1 && num <= 60) return "中和區~中和060區";
+          if (num >= 61) return "中和061區~中和開荒區";
+        }
+        if (rawArea.includes("開荒")) return "中和061區~中和開荒區";
+        return "中和區~中和060區";
+      }
+      for (const group of AREA_GROUPS) {
+        if (group.keywords.some(k => rawArea.includes(k))) return group.name;
+      }
+      return "其他";
+    }
+
+    // [第一層] 顯示大分類
+    function showMainAreas() {
+      currentView = 'main';
       const areaGrid = document.getElementById('area-grid');
+      const subGrid = document.getElementById('sub-area-grid');
       const nameList = document.getElementById('name-list');
       const backBtn = document.getElementById('back-btn');
       const title = document.getElementById('title');
-      title.innerText = "📋 點名系統 - 請選擇區域";
+
+      title.innerText = "📋 請選擇大分類";
       areaGrid.innerHTML = '';
-      if (!allData || allData.length === 0) {
-        document.getElementById('loader').innerText = "名冊無資料。";
-        document.getElementById('loader').classList.remove('hidden');
-        return;
-      }
-      const areas = [...new Set(allData.map(item => item.area))];
-      areas.forEach(area => {
-        const btn = document.createElement('button');
-        btn.className = 'area-btn';
-        btn.innerText = area || "未分類";
-        btn.onclick = () => showNamesByArea(area);
-        areaGrid.appendChild(btn);
+
+      const displayGroups = AREA_GROUPS.map(g => g.name);
+      if (allData.some(item => getParentGroupName(item.area) === "其他")) displayGroups.push("其他");
+
+      displayGroups.forEach(groupName => {
+        const count = allData.filter(item => getParentGroupName(item.area) === groupName).length;
+        if (count > 0) {
+          const btn = document.createElement('button');
+          btn.className = 'area-btn';
+          btn.innerHTML = `<span>${groupName}</span><small style="font-size:0.7em; font-weight:normal;">(${count}人)</small>`;
+          btn.onclick = () => showSubAreas(groupName);
+          areaGrid.appendChild(btn);
+        }
       });
+
       areaGrid.classList.remove('hidden');
+      subGrid.classList.add('hidden');
       nameList.classList.add('hidden');
       backBtn.classList.add('hidden');
     }
 
-    function showNamesByArea(area) {
+    // [第二層] 顯示大分類下的所有小區域
+    function showSubAreas(parentName) {
+      currentView = 'sub';
       const areaGrid = document.getElementById('area-grid');
+      const subGrid = document.getElementById('sub-area-grid');
       const nameList = document.getElementById('name-list');
       const backBtn = document.getElementById('back-btn');
       const title = document.getElementById('title');
-      title.innerText = `📍 ${area || "未分類"}`;
+
+      title.innerText = `📂 ${parentName}`;
+      subGrid.innerHTML = '';
+
+      // 過濾出屬於此大分類的所有成員，並提取他們具體的區域
+      const membersInParent = allData.filter(item => getParentGroupName(item.area) === parentName);
+      const subAreas = [...new Set(membersInParent.map(item => item.area))].sort();
+
+      subAreas.forEach(subName => {
+        const count = membersInParent.filter(item => item.area === subName).length;
+        const btn = document.createElement('button');
+        btn.className = 'area-btn sub-area-btn';
+        btn.innerHTML = `<span>${subName || "未分類"}</span><small style="font-size:0.7em; font-weight:normal;">(${count}人)</small>`;
+        btn.onclick = () => showNamesByFinalArea(subName, parentName);
+        subGrid.appendChild(btn);
+      });
+
+      areaGrid.classList.add('hidden');
+      subGrid.classList.remove('hidden');
+      nameList.classList.add('hidden');
+      backBtn.classList.remove('hidden');
+      backBtn.onclick = showMainAreas;
+    }
+
+    // [第三層] 顯示具體區域的人員名單
+    function showNamesByFinalArea(finalArea, parentName) {
+      currentView = 'list';
+      const subGrid = document.getElementById('sub-area-grid');
+      const nameList = document.getElementById('name-list');
+      const backBtn = document.getElementById('back-btn');
+      const title = document.getElementById('title');
+
+      title.innerText = `📍 ${finalArea || "未分類"}`;
       nameList.innerHTML = '';
-      const filtered = allData.filter(item => item.area === area);
+
+      const filtered = allData.filter(item => item.area === finalArea);
+
       filtered.forEach(item => {
         const div = document.createElement('div');
         div.className = 'row';
         div.innerHTML = `
           <div class="info">
             <span class="name-text">${item.name}</span>
-            <span class="sub-text">ID: ${item.memberId} | 座號: ${item.seatNum}</span>
-          </div>
-          <div class="btn-group">
-            <button class="btn-present" onclick="submit(this, ${JSON.stringify(item).replace(/"/g, '&quot;')}, '出席')">出席</button>
-            <button class="btn-leave" onclick="openLeaveModal(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})">請假</button>
+            <span class="sub-text">座號: ${item.seatNum} | ID: ${item.memberId}</span>
           </div>
         `;
+        
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'btn-group';
+        
+        const btnPresent = document.createElement('button');
+        btnPresent.className = 'btn-present';
+        btnPresent.innerText = '出席';
+        btnPresent.onclick = () => submit(btnPresent, item, '出席');
+
+        const btnLeave = document.createElement('button');
+        btnLeave.className = 'btn-leave';
+        btnLeave.innerText = '請假';
+        btnLeave.onclick = () => openLeaveModal(btnLeave, item);
+
+        btnGroup.appendChild(btnPresent);
+        btnGroup.appendChild(btnLeave);
+        div.appendChild(btnGroup);
         nameList.appendChild(div);
       });
-      areaGrid.classList.add('hidden');
+
+      subGrid.classList.add('hidden');
       nameList.classList.remove('hidden');
-      backBtn.classList.remove('hidden');
+      backBtn.onclick = () => showSubAreas(parentName);
     }
 
     function openLeaveModal(btn, item) {
-      currentItem = item;
-      currentBtn = btn;
-      document.getElementById('modal-name').innerText = `成員：${item.name}`;
+      currentTargetItem = item;
+      currentTargetBtn = btn;
+      document.getElementById('modal-title-name').innerText = `為 ${item.name} 登記請假`;
       document.getElementById('leave-modal').classList.remove('hidden');
-      document.getElementById('modal-submit-btn').onclick = () => {
-        const reason = document.getElementById('leave-reason-select').value;
-        submit(currentBtn, currentItem, '請假', reason);
+      document.getElementById('confirm-leave-btn').onclick = () => {
+        const reason = document.getElementById('leave-reason').value;
+        submit(currentTargetBtn, currentTargetItem, '請假', reason);
         closeLeaveModal();
       };
     }
 
     function closeLeaveModal() {
       document.getElementById('leave-modal').classList.add('hidden');
-      currentItem = null;
-      currentBtn = null;
     }
 
     async function submit(btn, item, status, reason = "") {
       const originalText = btn.innerText;
       btn.disabled = true;
-      btn.innerText = "傳送中...";
+      btn.innerText = "...";
+
       const params = new URLSearchParams({
         action: 'update',
         memberId: item.memberId,
@@ -184,12 +285,13 @@
         status: status,
         reason: reason
       });
+
       try {
         const response = await fetch(`${GAS_URL}?${params.toString()}`);
         const data = await response.json();
         alert(data.message);
       } catch (err) {
-        alert("傳送失敗，請確認 GAS 部署權存。");
+        alert("傳送失敗");
       } finally {
         btn.disabled = false;
         btn.innerText = originalText;
