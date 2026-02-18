@@ -9,7 +9,6 @@
     .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     h3 { text-align: center; color: #444; margin-bottom: 20px; }
     
-    /* 區域按鈕樣式 */
     .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
     .area-btn { 
       background-color: #2196F3; color: white; border: none; padding: 18px; 
@@ -19,11 +18,15 @@
     .area-btn:hover { background-color: #1976D2; transform: translateY(-2px); }
     .area-btn::after { content: '→'; opacity: 0.7; }
     
-    /* 小區域按鈕樣式 (顏色稍淡) */
-    .sub-area-btn { background-color: #607D8B; }
-    .sub-area-btn:hover { background-color: #455A64; }
+    .search-btn {
+      background-color: #673AB7; color: white; border: none; padding: 15px;
+      border-radius: 10px; font-size: 1em; cursor: pointer; font-weight: bold;
+      width: 100%; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;
+    }
+    .search-btn:hover { background-color: #512DA8; }
 
-    /* 名單顯示 */
+    .sub-area-btn { background-color: #607D8B; }
+
     .row { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding: 15px 0; }
     .info { display: flex; flex-direction: column; }
     .name-text { font-size: 1.1em; font-weight: bold; }
@@ -37,8 +40,15 @@
     .back-btn { background-color: #757575; color: white; margin-bottom: 15px; width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; }
     .hidden { display: none !important; }
     
-    #loader { text-align: center; color: #666; padding: 20px; }
-    .error-box { color: #d32f2f; background-color: #ffebee; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9em; display: none; word-break: break-all; }
+    #loader { text-align: center; color: #666; padding: 20px; font-size: 0.9em; }
+
+    /* 缺席名單專用格式 */
+    .absent-row { padding: 16px 12px; border-bottom: 1px solid #eee; background: #fff; }
+    .absent-name { font-size: 1.25em; font-weight: 800; color: #d32f2f; margin-bottom: 10px; }
+    .absent-detail-line { display: flex; gap: 20px; font-size: 1em; color: #444; margin-bottom: 6px; }
+    .absent-label { color: #888; margin-right: 6px; font-weight: normal; font-size: 0.9em; }
+    .absent-val { font-weight: 600; }
+    .reason-text { color: #f57c00; font-weight: 700; }
 
     /* Modal 樣式 */
     .modal-overlay {
@@ -51,8 +61,8 @@
       box-shadow: 0 10px 25px rgba(0,0,0,0.3);
     }
     .modal-card h4 { margin: 0 0 8px 0; color: #333; }
-    .modal-card select {
-      width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ddd; font-size: 1.1em;
+    .modal-card select, .modal-card input {
+      width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; font-size: 1.1em; box-sizing: border-box;
     }
     .modal-actions { display: flex; gap: 12px; }
     .modal-actions button { flex: 1; padding: 12px; }
@@ -63,26 +73,30 @@
 <body>
   <div class="container">
     <h3 id="title">📋 點名系統</h3>
-    <div id="error-display" class="error-box"></div>
+    
+    <div id="main-actions">
+      <button id="search-absent-btn" class="search-btn hidden" onclick="loadAndShowAbsentList()">🔍 查看今日缺席名冊 (純顯示)</button>
+    </div>
+
     <button id="back-btn" class="back-btn hidden">← 返回</button>
-    <div id="loader">正在讀取雲端名冊...</div>
+    <div id="loader">載入中...</div>
     <div id="area-grid" class="grid hidden"></div>
     <div id="sub-area-grid" class="grid hidden"></div>
     <div id="name-list" class="hidden"></div>
   </div>
 
-  <!-- 請假彈窗 -->
   <div id="leave-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <h4 id="modal-title-name">請假登記</h4>
       <p>請選擇原因：</p>
-      <select id="leave-reason">
+      <select id="leave-reason" onchange="toggleOtherInput()">
         <option value="病假">病假</option>
         <option value="事假">事假</option>
         <option value="公假">公假</option>
         <option value="晚到">晚到</option>
         <option value="其他">其他</option>
       </select>
+      <input type="text" id="other-reason" class="hidden" placeholder="請輸入請假原因...">
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeLeaveModal()">取消</button>
         <button class="btn-confirm" id="confirm-leave-btn">確認提交</button>
@@ -92,15 +106,12 @@
 
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxNFakNmcRc37HVkTyl3qmX4ovQ4REekrYTnHI7jbxW6LWO2uEoPaqP8Ok57lLtPT6J/exec";
-    
     let allData = []; 
-    let currentTargetItem = null; 
+    let currentTargetItem = null;
     let currentTargetBtn = null;
-    let currentView = 'main'; // main, sub, list
 
-    // 定義區域分類規則
     const AREA_GROUPS = [
-      { name: "中和區~中和060區", keywords: ["中和", "中和00", "中和01", "中和02", "中 scavenger 03", "中和04", "中和05", "中和060"] },
+      { name: "中和區~中和060區", keywords: ["中和00", "中和01", "中和02", "中和03", "中和04", "中和05", "中和060"] },
       { name: "中和061區~中和開荒區", keywords: ["中和06", "中和07", "中和08", "中和09", "中和1", "開荒"] },
       { name: "精明", keywords: ["精明"] },
       { name: "馬來西亞", keywords: ["馬來西亞", "Malaysia"] },
@@ -112,19 +123,16 @@
 
     async function loadData() {
       try {
-        const response = await fetch(`${GAS_URL}?action=getList`);
-        allData = await response.json();
+        const res = await fetch(`${GAS_URL}?action=getList`);
+        allData = await res.json();
         document.getElementById('loader').classList.add('hidden');
+        document.getElementById('search-absent-btn').classList.remove('hidden');
         showMainAreas();
       } catch (err) {
-        document.getElementById('loader').classList.add('hidden');
-        const errorDisplay = document.getElementById('error-display');
-        errorDisplay.style.display = 'block';
-        errorDisplay.innerHTML = "無法連接到資料庫，請檢查網路或 GAS 部署權限。";
+        document.getElementById('loader').innerText = "連線失敗。";
       }
     }
 
-    // 將具體區域分配到自定義大分類
     function getParentGroupName(rawArea) {
       if (!rawArea) return "其他";
       if (rawArea.includes("中和")) {
@@ -143,13 +151,12 @@
       return "其他";
     }
 
-    // [第一層] 顯示大分類
     function showMainAreas() {
-      currentView = 'main';
       const areaGrid = document.getElementById('area-grid');
       const subGrid = document.getElementById('sub-area-grid');
       const nameList = document.getElementById('name-list');
       const backBtn = document.getElementById('back-btn');
+      const mainActions = document.getElementById('main-actions');
       const title = document.getElementById('title');
 
       title.innerText = "📋 請選擇大分類";
@@ -163,31 +170,31 @@
         if (count > 0) {
           const btn = document.createElement('button');
           btn.className = 'area-btn';
-          btn.innerHTML = `<span>${groupName}</span><small style="font-size:0.7em; font-weight:normal;">(${count}人)</small>`;
+          btn.innerHTML = `<span>${groupName}</span><small>(${count}人)</small>`;
           btn.onclick = () => showSubAreas(groupName);
           areaGrid.appendChild(btn);
         }
       });
 
+      mainActions.classList.remove('hidden');
       areaGrid.classList.remove('hidden');
       subGrid.classList.add('hidden');
       nameList.classList.add('hidden');
       backBtn.classList.add('hidden');
     }
 
-    // [第二層] 顯示大分類下的所有小區域
     function showSubAreas(parentName) {
-      currentView = 'sub';
       const areaGrid = document.getElementById('area-grid');
       const subGrid = document.getElementById('sub-area-grid');
       const nameList = document.getElementById('name-list');
       const backBtn = document.getElementById('back-btn');
+      const mainActions = document.getElementById('main-actions');
       const title = document.getElementById('title');
 
       title.innerText = `📂 ${parentName}`;
       subGrid.innerHTML = '';
+      mainActions.classList.add('hidden');
 
-      // 過濾出屬於此大分類的所有成員，並提取他們具體的區域
       const membersInParent = allData.filter(item => getParentGroupName(item.area) === parentName);
       const subAreas = [...new Set(membersInParent.map(item => item.area))].sort();
 
@@ -195,7 +202,7 @@
         const count = membersInParent.filter(item => item.area === subName).length;
         const btn = document.createElement('button');
         btn.className = 'area-btn sub-area-btn';
-        btn.innerHTML = `<span>${subName || "未分類"}</span><small style="font-size:0.7em; font-weight:normal;">(${count}人)</small>`;
+        btn.innerHTML = `<span>${subName || "未分類"}</span><small>(${count}人)</small>`;
         btn.onclick = () => showNamesByFinalArea(subName, parentName);
         subGrid.appendChild(btn);
       });
@@ -207,51 +214,138 @@
       backBtn.onclick = showMainAreas;
     }
 
-    // [第三層] 顯示具體區域的人員名單
     function showNamesByFinalArea(finalArea, parentName) {
-      currentView = 'list';
       const subGrid = document.getElementById('sub-area-grid');
       const nameList = document.getElementById('name-list');
       const backBtn = document.getElementById('back-btn');
       const title = document.getElementById('title');
 
       title.innerText = `📍 ${finalArea || "未分類"}`;
+      renderList(allData.filter(item => item.area === finalArea));
+
+      subGrid.classList.add('hidden');
+      nameList.classList.remove('hidden');
+      backBtn.onclick = () => showSubAreas(parentName);
+    }
+
+    async function loadAndShowAbsentList() {
+      const loader = document.getElementById('loader');
+      loader.classList.remove('hidden');
+      loader.innerText = "正在讀取缺席名單...";
+
+      try {
+        const res = await fetch(`${GAS_URL}?action=getAbsentList`);
+        const absentData = await res.json();
+        
+        document.getElementById('title').innerText = "📄 今日缺席名單";
+        renderAbsentList(absentData);
+
+        document.getElementById('main-actions').classList.add('hidden');
+        document.getElementById('area-grid').classList.add('hidden');
+        document.getElementById('name-list').classList.remove('hidden');
+        document.getElementById('back-btn').classList.remove('hidden');
+        document.getElementById('back-btn').onclick = showMainAreas;
+      } catch (e) {
+        alert("讀取缺席名單失敗");
+      } finally {
+        loader.classList.add('hidden');
+      }
+    }
+
+    function renderAbsentList(items) {
+      const nameList = document.getElementById('name-list');
       nameList.innerHTML = '';
+      if (items.length === 0) {
+        nameList.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">✨ 目前無缺席人員</div>';
+        return;
+      }
+      
+      items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'absent-row';
+        div.innerHTML = `
+          <div class="absent-name">${item.name}</div>
+          <div class="absent-detail-line">
+            <span><span class="absent-label">性別</span><span class="absent-val">${item.gender || '無'}</span></span>
+            <span><span class="absent-label">座號</span><span class="absent-val">${item.seatNum || '無'}</span></span>
+          </div>
+          <div class="absent-detail-line">
+            <span><span class="absent-label">區域</span><span class="absent-val">${item.area || '無'}</span></span>
+            <span><span class="absent-label">原因</span><span class="absent-val reason-text">${item.reason || '未註記'}</span></span>
+          </div>
+        `;
+        nameList.appendChild(div);
+      });
+    }
 
-      const filtered = allData.filter(item => item.area === finalArea);
-
-      filtered.forEach(item => {
+    function renderList(items) {
+      const nameList = document.getElementById('name-list');
+      nameList.innerHTML = '';
+      if (items.length === 0) {
+        nameList.innerHTML = '<div style="text-align:center; padding:40px; color:#999;">目前無名單數據</div>';
+        return;
+      }
+      items.forEach(item => {
         const div = document.createElement('div');
         div.className = 'row';
         div.innerHTML = `
           <div class="info">
             <span class="name-text">${item.name}</span>
-            <span class="sub-text">座號: ${item.seatNum} | ID: ${item.memberId}</span>
+            <span class="sub-text">${item.area} | 座號: ${item.seatNum}</span>
           </div>
         `;
-        
         const btnGroup = document.createElement('div');
         btnGroup.className = 'btn-group';
         
-        const btnPresent = document.createElement('button');
-        btnPresent.className = 'btn-present';
-        btnPresent.innerText = '出席';
-        btnPresent.onclick = () => submit(btnPresent, item, '出席');
-
-        const btnLeave = document.createElement('button');
-        btnLeave.className = 'btn-leave';
-        btnLeave.innerText = '請假';
-        btnLeave.onclick = () => openLeaveModal(btnLeave, item);
-
-        btnGroup.appendChild(btnPresent);
-        btnGroup.appendChild(btnLeave);
+        const b1 = document.createElement('button'); 
+        b1.className = 'btn-present'; 
+        b1.innerText = '出席';
+        b1.onclick = () => submit(b1, item, '出席');
+        
+        const b2 = document.createElement('button'); 
+        b2.className = 'btn-leave'; 
+        b2.innerText = '請假';
+        b2.onclick = () => openLeaveModal(b2, item);
+        
+        btnGroup.appendChild(b1); 
+        btnGroup.appendChild(b2);
         div.appendChild(btnGroup);
         nameList.appendChild(div);
       });
+    }
 
-      subGrid.classList.add('hidden');
-      nameList.classList.remove('hidden');
-      backBtn.onclick = () => showSubAreas(parentName);
+    async function submit(btn, item, status, reason = "") {
+      const originalText = btn.innerText;
+      btn.disabled = true; 
+      btn.innerText = "...";
+      
+      const params = new URLSearchParams({
+        action: 'update',
+        memberId: item.memberId, 
+        name: item.name, 
+        gender: item.gender,
+        seatNum: item.seatNum, 
+        area: item.area, 
+        status: status, 
+        reason: reason
+      });
+
+      try {
+        const res = await fetch(`${GAS_URL}?${params.toString()}`);
+        const data = await res.json();
+        if(data.success) {
+          btn.innerText = "已送出";
+          btn.style.backgroundColor = "#999";
+        } else {
+          alert(data.message);
+          btn.innerText = originalText;
+        }
+      } catch (err) { 
+        alert("傳送失敗"); 
+        btn.innerText = originalText;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     function openLeaveModal(btn, item) {
@@ -259,43 +353,38 @@
       currentTargetBtn = btn;
       document.getElementById('modal-title-name').innerText = `為 ${item.name} 登記請假`;
       document.getElementById('leave-modal').classList.remove('hidden');
+      document.getElementById('leave-reason').value = "病假"; // 預設值
+      document.getElementById('other-reason').value = "";
+      document.getElementById('other-reason').classList.add('hidden');
+      
       document.getElementById('confirm-leave-btn').onclick = () => {
-        const reason = document.getElementById('leave-reason').value;
-        submit(currentTargetBtn, currentTargetItem, '請假', reason);
+        const selectValue = document.getElementById('leave-reason').value;
+        const otherValue = document.getElementById('other-reason').value;
+        const finalReason = selectValue === "其他" ? otherValue : selectValue;
+        
+        if (selectValue === "其他" && !otherValue.trim()) {
+            alert("請輸入請假原因");
+            return;
+        }
+        
+        submit(currentTargetBtn, currentTargetItem, '請假', finalReason);
         closeLeaveModal();
       };
     }
 
-    function closeLeaveModal() {
-      document.getElementById('leave-modal').classList.add('hidden');
+    function toggleOtherInput() {
+      const select = document.getElementById('leave-reason');
+      const otherInput = document.getElementById('other-reason');
+      if (select.value === "其他") {
+        otherInput.classList.remove('hidden');
+        otherInput.focus();
+      } else {
+        otherInput.classList.add('hidden');
+      }
     }
 
-    async function submit(btn, item, status, reason = "") {
-      const originalText = btn.innerText;
-      btn.disabled = true;
-      btn.innerText = "...";
-
-      const params = new URLSearchParams({
-        action: 'update',
-        memberId: item.memberId,
-        name: item.name,
-        gender: item.gender,
-        seatNum: item.seatNum,
-        area: item.area,
-        status: status,
-        reason: reason
-      });
-
-      try {
-        const response = await fetch(`${GAS_URL}?${params.toString()}`);
-        const data = await response.json();
-        alert(data.message);
-      } catch (err) {
-        alert("傳送失敗");
-      } finally {
-        btn.disabled = false;
-        btn.innerText = originalText;
-      }
+    function closeLeaveModal() {
+      document.getElementById('leave-modal').classList.add('hidden');
     }
   </script>
 </body>
